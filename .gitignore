@@ -1,14 +1,164 @@
-# A fast, small, safe, gradually typed embeddable scripting language derived from Lua
-#
-# https://github.com/luau-lang/luau
-# https://luau.org/
+_G.Status = "Ready!"
+local getinfo = getinfo or debug.getinfo
+local DEBUG = false
+local Hooked = {}
 
-# Code coverage
-coverage.out
+local Detected, Kill
 
-# Profiling
-profile.out
-profile.svg
+pcall(function()
+setthreadidentity(2)
+end)
 
-# Time trace
-trace.json
+for i, v in pairs(getgc(true)) do
+if typeof(v) == "table" then
+local DetectFunc = rawget(v, "Detected")
+local KillFunc = rawget(v, "Kill")
+
+if typeof(DetectFunc) == "function" and not Detected then
+Detected = DetectFunc
+
+local Old; Old = hookfunction(DetectFunc, function(Action, Info, NoCrash)
+if Action ~= "_" then
+if DEBUG then
+warn(`[ANTICHEAT] Detected flagged\nMethod: {Action}\nInfo: {Info}`)
+end
+end
+return true
+end)
+
+table.insert(Hooked, DetectFunc)
+end
+
+if rawget(v, "Variables") and rawget(v, "Process") and typeof(KillFunc) == "function" and not Kill then
+Kill = KillFunc
+local Old; Old = hookfunction(KillFunc, function(Info)
+if DEBUG then
+warn(`[ANTICHEAT] Kill attempt blocked: {Info}`)
+end
+return nil
+end)
+
+table.insert(Hooked, KillFunc)
+end
+end
+end
+
+local Old; Old = hookfunction(getrenv().debug.info, newcclosure(function(...)
+local LevelOrFunc, Info = ...
+
+if Detected and LevelOrFunc == Detected then
+if DEBUG then
+warn(`[BYPASS] Adonis detection bypassed via debug.info`)
+end
+return coroutine.yield()
+end
+
+return Old(...)
+end))
+
+setthreadidentity(7)
+local hook
+hook = hookmetamethod(game, "__namecall", function(self, ...)
+local method = getnamecallmethod()
+local selfName = tostring(self)
+
+if method == "FireServer" then
+if selfName == "Fire" or selfName == "Damage" or
+selfName:find("Detect") or selfName:find("Ban") or
+selfName:find("Kick") then
+return nil
+end
+end
+
+return hook(self, ...)
+end)
+
+local function findAndHookAdonisRuntime()
+for i, v in pairs(getgc(true)) do
+if typeof(v) == "function" then
+local funcInfo = getinfo(v)
+local funcName = funcInfo.name or ""
+
+if funcName:find("Detect") or funcName:find("AntiCheat") or
+funcName:find("Security") or funcName:find("Check") then
+
+pcall(function()
+hookfunction(v, function(...)
+if DEBUG then
+warn(`[RUNTIME] Function '{funcName}' blocked`)
+end
+return nil
+end)
+table.insert(Hooked, v)
+end)
+end
+end
+end
+end
+
+findAndHookAdonisRuntime()
+
+local function setupContinuousMonitoring()
+task.spawn(function()
+while true do
+task.wait(3)
+
+pcall(function()
+for i, v in pairs(getgc(true)) do
+if typeof(v) == "table" then
+local DetectFunc = rawget(v, "Detected")
+
+if typeof(DetectFunc) == "function" and not table.find(Hooked, DetectFunc) then
+hookfunction(DetectFunc, function(Action, Info, NoCrash)
+return true
+end)
+table.insert(Hooked, DetectFunc)
+end
+end
+end
+end)
+end
+end)
+end
+
+setupContinuousMonitoring()
+
+print("╔════════════════════════════════════╗")
+print("║ ADONIS ANTICHEAT BYPASS v3.0 ║")
+print("║ GC SCANNING + METATABLE HOOK ║")
+print("╚════════════════════════════════════╝\n")
+
+print("[✓] Detected Function: " .. (Detected and "HOOKED" or "NOT FOUND"))
+print("[✓] Kill Function: " .. (Kill and "HOOKED" or "NOT FOUND"))
+print("[✓] Total Hooked: " .. #Hooked)
+print("[✓] Metatable Hook: ACTIVE")
+print("[✓] Debug.Info Hook: ACTIVE")
+print("[✓] Runtime Monitoring: ACTIVE\n")
+
+local function saveLog()
+local content = ""
+content = content .. "═══════════════════════════════════\n"
+content = content .. "ADONIS BYPASS LOG - GC SCANNING\n"
+content = content .. "═══════════════════════════════════\n\n"
+content = content .. "TIMESTAMP: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n\n"
+
+content = content .. "STATUS:\n"
+content = content .. string.format(" Detected Found: %s\n", Detected and "YES" or "NO")
+content = content .. string.format(" Kill Found: %s\n", Kill and "YES" or "NO")
+content = content .. string.format(" Total Functions Hooked: %d\n", #Hooked)
+content = content .. "\nMETHODS ACTIVE:\n"
+content = content .. " ✓ GC Scanning\n"
+content = content .. " ✓ Detected Hook\n"
+content = content .. " ✓ Kill Hook\n"
+content = content .. " ✓ Metatable Hook\n"
+content = content .. " ✓ Debug.Info Hook\n"
+content = content .. " ✓ Runtime Monitoring\n"
+
+pcall(function()
+writefile("adonis_bypass_gc.log", content)
+end)
+end
+
+saveLog()
+
+_G.Status = "Adonis Bypassed!"
